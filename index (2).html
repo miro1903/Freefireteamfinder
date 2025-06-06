@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FFTeamFinder</title>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getDatabase, ref, set, get, onValue, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDwvH7M-GVJnGcO4bm45XSiTLKRkrxBZ7I",
+      authDomain: "ffteamfinder-5eb2d.firebaseapp.com",
+      databaseURL: "https://ffteamfinder-5eb2d-default-rtdb.firebaseio.com",
+      projectId: "ffteamfinder-5eb2d",
+      storageBucket: "ffteamfinder-5eb2d.appspot.com",
+      messagingSenderId: "643376168999",
+      appId: "1:643376168999:web:18bda4987d476c6f1e8e02"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth();
+    const db = getDatabase(app);
+
+    const signInBtn = document.getElementById("googleSignIn");
+    const playerForm = document.getElementById("playerForm");
+    const welcomeText = document.getElementById("welcome");
+    const savePlayerBtn = document.getElementById("savePlayer");
+    const searchPlayersBtn = document.getElementById("searchPlayers");
+    const resultsDiv = document.getElementById("results");
+
+    signInBtn.addEventListener("click", async () => {
+      const provider = new GoogleAuthProvider();
+      try {
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        playerForm.style.display = "block";
+        signInBtn.style.display = "none";
+        welcomeText.innerText = `مرحبًا ${user.displayName}`;
+        loadNotifications();
+      } catch (error) {
+        alert("فشل تسجيل الدخول: " + error.message);
+      }
+    });
+
+    savePlayerBtn.addEventListener("click", () => {
+      const name = document.getElementById("playerName").value.trim();
+      const id = document.getElementById("playerID").value.trim();
+      if (name === '' || id === '') {
+        alert('رجاءً املأ كل المعلومات');
+        return;
+      }
+      if (name.length > 12) {
+        alert('الاسم يجب ألا يتجاوز 12 حرفًا');
+        return;
+      }
+      const user = auth.currentUser;
+      if (user) {
+        set(ref(db, 'players/' + user.uid), {
+          uid: user.uid,
+          name: name,
+          ffid: id,
+          email: user.email
+        }).then(() => {
+          alert("تم حفظ معلوماتك!");
+        });
+      }
+    });
+
+    searchPlayersBtn.addEventListener("click", () => {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
+      resultsDiv.innerHTML = "جاري البحث...";
+
+      onValue(ref(db, 'players'), snapshot => {
+        resultsDiv.innerHTML = "";
+        let count = 0;
+        snapshot.forEach(child => {
+          const player = child.val();
+          if (player.uid !== currentUser.uid && count < 3) {
+            const div = document.createElement("div");
+            div.innerHTML = `<strong>${player.name}</strong> (ID: ${player.ffid}) <button data-uid="${player.uid}">إرسال طلب</button>`;
+            resultsDiv.appendChild(div);
+            count++;
+          }
+        });
+
+        if (count === 0) resultsDiv.innerText = "لا يوجد لاعبين حاليًا.";
+      });
+    });
+
+    resultsDiv.addEventListener("click", (e) => {
+      if (e.target.tagName === "BUTTON") {
+        const targetUid = e.target.getAttribute("data-uid");
+        const sender = auth.currentUser;
+        push(ref(db, 'requests/' + targetUid), {
+          from: sender.uid,
+          time: Date.now()
+        });
+        alert("تم إرسال الطلب!");
+      }
+    });
+
+    function loadNotifications() {
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          onValue(ref(db, 'requests/' + user.uid), snapshot => {
+            if (snapshot.exists()) {
+              alert("📨 لديك طلب جديد من لاعب آخر!");
+            }
+          });
+        }
+      });
+    }
+  </script>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Arial', sans-serif;
+      background: url('https://wallpaperaccess.com/full/6022790.jpg') no-repeat center center fixed;
+      background-size: cover;
+      color: #fff;
+      text-align: center;
+    }
+    .overlay {
+      background-color: rgba(0, 0, 0, 0.7);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    h1 {
+      font-size: 3rem;
+      color: gold;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px 5px #000;
+    }
+    .form-container {
+      max-width: 400px;
+      margin: auto;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 20px;
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+    button {
+      background: gold;
+      color: black;
+      cursor: pointer;
+      transition: transform 0.3s ease;
+    }
+    button:hover {
+      transform: scale(1.05);
+      background: #ffc107;
+    }
+    #playerForm {
+      display: none;
+    }
+    #results {
+      margin-top: 20px;
+    }
+    footer {
+      margin-top: 40px;
+      font-size: 0.9rem;
+      color: #ccc;
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay">
+    <h1>FFTeamFinder</h1>
+    <p id="welcome"></p>
+    <div class="form-container">
+      <button id="googleSignIn">تسجيل الدخول باستخدام Google</button>
+      <div id="playerForm">
+        <input type="text" id="playerName" placeholder="أدخل اسمك (12 حرفًا كحد أقصى)" maxlength="12">
+        <input type="number" id="playerID" placeholder="أدخل ID فري فاير الخاص بك">
+        <button id="savePlayer">حفظ المعلومات</button>
+        <button id="searchPlayers">البحث عن لاعبين</button>
+        <div id="results"></div>
+      </div>
+    </div>
+    <footer>
+      &copy; 2025 FFTeamFinder. جميع الحقوق محفوظة.
+    </footer>
+  </div>
+</body>
+</html>
